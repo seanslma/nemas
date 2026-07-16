@@ -1,0 +1,167 @@
+# Required: The site_name is the title of your documentation site.
+# It will appear in the browser tab and at the top of the navigation.
+site_name: nemas
+
+# Optional: The repository URL for your project
+repo_url: https://github.com/seanslma/nemas
+
+# Optional: The URL where your site will be hosted.
+# This is used for generating absolute URLs in the site.
+site_url: https://seanslma.github.io/nemas
+
+# Optional: A short description of your site.
+# Used in metadata for SEO and sometimes in the theme.
+site_description: My python utils package
+
+# Optional: The base URL of your site if deployed to a sub-path.
+# For example, if your docs are at 'example.com/docs/', set this to '/docs/'.
+# base_url: /docs/
+
+# Optional: The author(s) of the documentation.
+site_author: Sean Ma
+
+# Where to save the web content
+site_dir: ../../doc/nemas
+
+# Navigation Structure
+# The 'nav' section defines the structure and order of your documentation.
+# Each entry is a title, followed by the path to the Markdown file or a nested list.
+nav:
+  - Home: 'index.md'
+  - Tutorial: 'tutorial.md'
+  - API Reference: ./api/index.html # Link to the separate Sphinx docs
+
+# Configuration
+docs_dir: guide/
+
+# Copyright notice
+copyright: |
+  <a href="/" title="Go to Main Home Page">🏠 Back to Home</a><br>
+  Copyright &copy; {year} Sean Ma
+
+# Theme Configuration
+# The 'theme' section defines the look and feel of your documentation.
+theme:
+  # The name of the theme to use. 'material' is highly recommended for its features.
+  name: material
+  # custom_dir: theme
+
+  # Optional: Specify a custom language for your documentation.
+  # This affects localization of theme elements (e.g., "Next", "Previous").
+  language: en
+
+  # Optional: Define colors for various parts of the theme.
+  palette:
+    # Scheme can be 'default' (light) or 'slate' (dark).
+    - scheme: default # Light mode `preference`
+      primary: amber
+      accent: yellow
+      toggle:
+        icon: material/brightness-4 # Icon for dark mode toggle
+        name: Switch to dark mode
+    - scheme: slate   # Dark mode
+      toggle:
+        icon: material/brightness-7 # Icon for light mode toggle
+        name: Switch to light mode
+
+  # Optional: Choose a primary and accent color from Material Design palette.
+  # https://squidfunk.github.io/mkdocs-material/setup/setting-up-colors/#palette
+  # primary: indigo
+  # accent: indigo
+
+  # Optional: Set the font families for text and code.
+  font:
+    text: Roboto
+    code: Roboto Mono
+
+  # Optional: Add an icon to the site title.
+  # The icon must be available in the Material Design Icons font.
+  # https://squidfunk.github.io/mkdocs-material/reference/icons-emojis/#search
+  icon:
+    logo: material/library
+    repo: fontawesome/brands/git-alt
+
+  # Optional: Enable specific features of the Material theme.
+  # https://squidfunk.github.io/mkdocs-material/setup/setting-up-features/
+  features:
+    - header.autohide
+    - navigation.indexes
+    - navigation.tabs           # Top-level tabs for main sections
+    - navigation.tabs.sticky
+    - navigation.instant        # Instant page loading for faster navigation
+    - navigation.tracking       # Highlights active section in side nav
+    - navigation.sections       # Groups sub-sections under top-level entries
+    - navigation.top            # Back to top button
+    - content.code.copy         # Adds a "copy" button to code blocks
+    - search.highlight          # Highlight search results on page
+    - search.suggest            # Auto-suggest for search queries
+    # - toc.integrate             # Integrate Table of Contents into main navigation
+
+  # Optional: Additional CSS or JavaScript files.
+  # extra_css:
+  #   - stylesheets/extra.css
+  # extra_javascript:
+  #   - javascripts/extra.js
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          paths:
+            # THIS IS THE CRUCIAL PART!
+            # The path to the directory that *contains* your 'sim' package.
+            # If mkdocs.yaml is in 'my_project_root/docs/'
+            # and 'sim' is in 'my_project_root/mapy/sim',
+            # you need to go UP one level (..) to 'my_project_root/',
+            # then DOWN into 'mapy/'.
+            - ../nemas/ # <--- Corrected path!
+          options:
+            show_source: true
+            show_root_heading: true
+            show_root_toc_entry: true
+            show_root_full_path: true
+            show_object_full_path: false
+            show_category_heading: true
+            show_signature_annotations: true
+            signature_crossrefs: true
+            docstring_style: numpy # google
+            members_order: source
+            separate_signature: false
+            docstring_section_style: table
+            # filters: ["!^_"] # Example: exclude private members
+
+# extra:
+#   social:
+#     - icon: example-icon
+#       link: https://my.example.com/example
+
+# Extensions for Markdown
+# mkdocs uses Python Markdown. This section enables additional Markdown syntax.
+# https://squidfunk.github.io/mkdocs-material/reference/markdown-extensions/
+markdown_extensions:
+  - toc:
+      permalink: true
+      toc_depth: 3
+  - mdx_math                 # python-markdown-math
+  - attr_list                # Allows adding HTML attributes to Markdown elements
+  - md_in_html               # Allows Markdown inside HTML blocks
+  - admonition               # For "note", "tip", "warning" boxes (MkDocs-Material style)
+  # - pymdownx.highlight:      # Code syntax highlighting
+  #     anchor_linenums: true  # Anchor line numbers in code blocks
+  #     line_numbers: true     # Show line numbers
+  #     linenums_style: pymdownx-inline # Style for line numbers
+  - pymdownx.superfences     # Nested code blocks, enables fenced diagrams
+  - pymdownx.details         # Expandable details/summary blocks
+  - pymdownx.critic          # Markdown extension for critic marks (additions, deletions)
+  - pymdownx.tasklist:       # Task lists (checkboxes)
+      custom_checkbox: true
+  # - pymdownx.tabbed:         # Tabbed content blocks
+  #     alternate
+
+extra_javascript:
+  - https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.0/MathJax.js?config=TeX-AMS-MML_HTMLorMML
+
+hooks:
+  - hooks.py
