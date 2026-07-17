@@ -1,5 +1,5 @@
-from .parser import extract_zip_csv
+from .parser import read_zip_csv
 
 __all__ = [
-    'extract_zip_csv',
+    'read_zip_csv',
 ]
