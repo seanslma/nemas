@@ -3,8 +3,8 @@ import polars as pl
 
 
 __all__ = [
-    'build_filter_expr',
     'apply_filters',
+    'build_filter_expr',
 ]
 
 

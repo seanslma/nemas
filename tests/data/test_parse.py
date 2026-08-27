@@ -1,5 +1,5 @@
 import polars as pl
-from nemas.data.nem import standardize_params
+from nemas.data.parse import standardize_params
 
 
 def test_standardize_params():

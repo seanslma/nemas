@@ -1,18 +1,23 @@
 import re
 import logging
 import polars as pl
+import polars.selectors as cs
 from io import BytesIO
 from pathlib import Path
 from zipfile import ZipFile
 from typing import IO
 
-from nemas.utils import to_lowercase, to_uppercase
+from nemas.utils import (
+    merge_df_dicts,
+    to_lowercase,
+    to_uppercase,
+)
 from nemas.data.web import get_html
 from nemas.data.filter import apply_filters
 
 
 __all__ = [
-    'read_nem_zip',
+    'read_zip',
 ]
 
 logger = logging.getLogger(__name__)
@@ -158,38 +163,67 @@ def get_source_bytes(
 
 
 def read_zip_csv(
-    zip_file: ZipFile,
-    file_name: str,
+    zipfile: ZipFile,
+    filename: str,
     tables: list = None,
     columns: list[str] | dict[str, list[str]] = None,
     schemas: dict[str, list[str] | dict[str, pl.DataType]] = None,
     conditions: dict[str, pl.Expr | list[tuple]] = None,
     header_to_lowercase: bool = True,
+    lazy: bool = False,
 ) -> dict:
-    raw = zip_file.read(file_name)
+    raw = zipfile.read(filename)
 
     # get table start and end rows
-    table_metadata = (
-        pl.read_csv(
-            raw,
-            skip_rows=0,
-            columns=[0, 2],
-            new_columns=['rid', 'flag', 'tbl'],
-            batch_size=8192 // 4,
-            has_header=False,
-            ignore_errors=True,
-            schema=None,
-            # low_memory=True,
-            row_index_name='rid',
+    if lazy:
+        table_metadata = (
+            pl.scan_csv(
+                raw,
+                skip_rows=0,
+                has_header=False,
+                schema=None,
+                ignore_errors=True,
+                row_index_name='rid',
+                # truncate_ragged_lines=True,
+                # low_memory=True,
+            )
+            .select(
+                'rid',
+                pl.col('column_1').alias('flag'),
+                pl.col('column_3').alias('tbl'),
+            )
+            .filter(pl.col('flag').is_in(['I', 'D']))
+            .group_by(['tbl'])
+            .agg(
+                pl.col('rid').first().alias('start'),
+                pl.col('rid').last().alias('end'),
+            )
+            .filter(pl.lit(True) if tables is None else pl.col('tbl').is_in(tables))
+            .collect(engine='streaming')
         )
-        .filter(pl.col('flag').is_in(['I', 'D']))
-        .group_by(['tbl'])
-        .agg(
-            (pl.col('rid').first()).alias('start'),
-            (pl.col('rid').last()).alias('end'),
+    else:
+        table_metadata = (
+            pl.read_csv(
+                raw,
+                skip_rows=0,
+                has_header=False,
+                schema=None,
+                columns=[0, 2],
+                new_columns=['rid', 'flag', 'tbl'],
+                ignore_errors=True,
+                batch_size=8192 // 4,
+                # truncate_ragged_lines=True,
+                # low_memory=True,
+                row_index_name='rid',
+            )
+            .filter(pl.col('flag').is_in(['I', 'D']))
+            .group_by(['tbl'])
+            .agg(
+                (pl.col('rid').first()).alias('start'),
+                (pl.col('rid').last()).alias('end'),
+            )
+            .filter(pl.lit(True) if tables is None else pl.col('tbl').is_in(tables))
         )
-        .filter(pl.lit(True) if tables is None else pl.col('tbl').is_in(tables))
-    )
 
     # read tables
     dfs = {}
@@ -197,31 +231,55 @@ def read_zip_csv(
         n_rows = row_end - skip_rows
         cols = None if columns is None else columns.get(table_name, None)
         schema_overrides = None if schemas is None else schemas.get(table_name, None)
-        df = pl.read_csv(
-            raw,
-            columns=cols,
-            skip_lines=skip_rows,
-            schema_overrides=schema_overrides,
-            batch_size=8192 // 4,
-            n_rows=n_rows,
-            # low_memory=True,
-            has_header=True,
-            ignore_errors=True,
-            truncate_ragged_lines=True,
-            try_parse_dates=True,
-        )
-        if header_to_lowercase:
-            df = df.rename(str.lower)
-            table_name = table_name.lower()
-        if conditions is not None:
-            df = apply_filters(df, conditions.get(table_name, None))
-
+        if lazy:
+            df = pl.scan_csv(
+                raw,
+                schema_overrides=schema_overrides,
+                skip_lines=skip_rows,
+                has_header=True,
+                n_rows=n_rows,
+                try_parse_dates=True,
+                ignore_errors=True,
+                truncate_ragged_lines=True,
+                # low_memory=True,
+            )
+            if cols is None:
+                df = df.select(~cs.by_index(range(4)))  # drop metadata columns
+            else:
+                df = df.select(cols)
+            if header_to_lowercase:
+                df = df.rename(str.lower)
+                table_name = table_name.lower()
+            if conditions is not None:
+                df = apply_filters(df, conditions.get(table_name, None))
+            df = df.collect(engine='streaming')
+        else:
+            df = pl.read_csv(
+                raw,
+                columns=cols,
+                schema_overrides=schema_overrides,
+                skip_lines=skip_rows,
+                has_header=True,
+                n_rows=n_rows,
+                try_parse_dates=True,
+                ignore_errors=True,
+                truncate_ragged_lines=True,
+                batch_size=8192 // 4,
+                # low_memory=True,
+            )
+            if cols is None:
+                df = df.select(~cs.by_index(range(4)))  # drop metadata columns
+            if header_to_lowercase:
+                df = df.rename(str.lower)
+                table_name = table_name.lower()
+            if conditions is not None:
+                df = apply_filters(df, conditions.get(table_name, None))
         dfs[table_name] = df
 
     return dfs
 
 
-def read_nem_zip(
+def read_zip(
     source: str | Path | IO[str] | IO[bytes] | bytes,
     *,
     requests_session=None,
@@ -231,8 +289,9 @@ def read_nem_zip(
     conditions: dict[str, pl.Expr | list[tuple]] = None,
     save_zip: bool = False,
     zip_path: str | Path | None = None,
-    header_to_lowercase: bool = True,
     validate_params: bool = True,
+    header_to_lowercase: bool = True,
+    lazy: bool = False,
 ) -> dict[str, pl.DataFrame]:
     """
     Read a NEM zip file from a URL, local filepath, file-like object, or raw bytes.
@@ -259,11 +318,13 @@ def read_nem_zip(
     zip_path : str | Path, optional
         Where to save the zip if keep_zip=True. Defaults to the source filename
         (or "downloaded.zip" if it can't be inferred, e.g. from a URL/buffer).
-    header_to_lowercase : bool
-        If True, convert all column names to lowercase.
     validate_params : bool
         If True, validate and standardize the `tables`, `columns`, `schemas`, and
         `conditions` parameters.
+    header_to_lowercase : bool
+        If True, convert all column names to lowercase.
+    lazy : bool
+        If True, use lazy mode.
     """
     raw_bytes, default_name = get_source_bytes(
         source, requests_session=requests_session
@@ -293,12 +354,26 @@ def read_nem_zip(
             if re.search(r'.+(\.(csv|CSV))$', file.filename):
                 dfs = read_zip_csv(
                     zf,
-                    file_name=file.filename,
+                    filename=file.filename,
                     tables=tables,
                     columns=columns,
                     schemas=schemas,
                     conditions=conditions,
                     header_to_lowercase=header_to_lowercase,
+                    lazy=lazy,
                 )
                 data |= dfs
+            elif re.search(r'.+(\.(zip|ZIP))$', file.filename):
+                dat = read_zip(
+                    zf.read(file.filename),
+                    tables=tables,
+                    columns=columns,
+                    schemas=schemas,
+                    conditions=conditions,
+                    save_zip=False,
+                    validate_params=False,
+                    header_to_lowercase=header_to_lowercase,
+                    lazy=lazy,
+                )
+                data = merge_df_dicts(data, dat)
     return data

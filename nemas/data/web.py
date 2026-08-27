@@ -4,10 +4,12 @@ import polars as pl
 from urllib.parse import urlparse
 from typing import Literal
 
+from nemas.utils.cache import ttl_cached
+
 
 __all__ = [
     'get_html',
-    'get_nem_url',
+    'get_url',
     'get_url_base',
 ]
 
@@ -21,11 +23,13 @@ def get_url_base(url: str) -> str:
     return base_url
 
 
+@ttl_cached(namespace='html', exclude=['session', 'cache'])
 def get_html(
     url,
     *,
     session=None,
     ret_type: Literal['text', 'content'] = 'text',
+    cache: bool = False,
 ) -> str | bytes:
     if session:
         resp = session.get(url)
@@ -38,7 +42,7 @@ def get_html(
         return resp.content
 
 
-def get_nem_url(
+def get_url(
     url: str,
     *,
     session=None,

@@ -3,7 +3,7 @@ from datetime import datetime
 import polars as pl
 
 from ..config.config import TABLE_CONFIG
-from .nem import read_nem_zip
+from .parse import read_zip
 
 
 def partition_path(
@@ -12,7 +12,9 @@ def partition_path(
     granularity: str,
     ts: datetime = None,
 ) -> Path:
-    """Build the Hive-style partition directory for a given row timestamp."""
+    """
+    Build the Hive-style partition directory for a given row timestamp.
+    """
     path = base_dir / table_name.lower()
     if granularity is None:
         return path
@@ -28,8 +30,10 @@ def partition_path(
 
 
 def cast_to_schema(df: pl.DataFrame, schema: dict) -> pl.DataFrame:
-    """Cast/select columns to the canonical schema, adding any missing
-    columns as nulls so downstream partitions have a consistent layout."""
+    """
+    Cast/select columns to the canonical schema, adding any missing
+    columns as nulls so downstream partitions have a consistent layout.
+    """
     exprs = []
     for col, dtype in schema.items():
         if col in df.columns:
@@ -101,35 +105,12 @@ def write_nem_zip(
     Raw zip archiving (raw_archive_dir/<table>/year/month/day/) is assumed
     handled upstream by the downloader, per the earlier discussion.
     """
-    tables = read_nem_zip(source)  # dict[str, pl.DataFrame]
+    tables = read_zip(source)  # dict[str, pl.DataFrame]
 
     for table_name, df in tables.items():
         if table_name not in TABLE_CONFIG:
             continue
         save_parquet(df, table_name, base_dir)
-
-
-def get_data(
-    tables: str | list[str],
-    start_date: datetime,
-    end_date: datetime = None,
-    columns: list[str] | dict[str, list[str]] = None,
-    schemas: dict | dict[str, dict] = None,
-    filters: pl.Expr | dict[str, pl.Expr] = None,
-) -> dict[str, pl.DataFrame]:
-    """
-    Return a dict of table_name -> pl.DataFrame for all tables in TABLE_CONFIG.
-    This is a convenience function for interactive exploration, but is not
-    intended for production use (which should instead read the partitioned
-    Parquet store).
-    """
-    data = {}
-    for table_name in TABLE_CONFIG.keys():
-        table_dir = Path('parquet') / table_name.lower()
-        if not table_dir.exists():
-            continue
-        data[table_name] = pl.read_parquet(table_dir)
-    return data
 
 
 def cache_data(tables: str | list[str] = None):
@@ -140,7 +121,7 @@ def cache_data(tables: str | list[str] = None):
     """
     raw_dir = Path('raw')
     parquet_dir = Path('parquet')
-    for table_name in TABLE_CONFIG.keys():
+    for table_name in TABLE_CONFIG:
         table_dir = raw_dir / table_name.lower()
         if not table_dir.exists():
             continue

@@ -41,3 +41,6 @@ target-version = "py312"
 [tool.ruff.format]
 preview = false
 quote-style = "single"
+
+[tool.ruff.lint]
+ignore = ["I001", "DTZ011", "RUF013"]
