@@ -10,6 +10,7 @@ from .data import (
     cache_data,
     get_data,
     get_url,
+    parse_zip,
     read_zip,
 )
 
@@ -18,5 +19,6 @@ __all__ = [
     'cache_data',
     'get_data',
     'get_url',
+    'parse_zip',
     'read_zip',
 ]

@@ -11,219 +11,252 @@ __all__ = [
     'to_polars_dtypes',
 ]
 
+URL_BASE = 'https://www.nemweb.com.au/'
+
 TABLE_CONFIG = {
-    # --- Dispatch (5-min) ---
-    'DISPATCHPRICE': {
-        'partition_column': 'SETTLEMENTDATE',
-        'partition_granularity': 'day',
-        'schema': {
-            'SETTLEMENTDATE': 'TIMESTAMP',
-            'RUNNO': 'INTEGER',
-            'REGIONID': 'VARCHAR',
-            'INTERVENTION': 'INTEGER',
-            'RRP': 'DOUBLE',
-            'RAISE6SECRRP': 'DOUBLE',
-            'RAISE60SECRRP': 'DOUBLE',
-            'RAISE5MINRRP': 'DOUBLE',
-            'RAISEREGRRP': 'DOUBLE',
-            'LOWER6SECRRP': 'DOUBLE',
-            'LOWER60SECRRP': 'DOUBLE',
-            'LOWER5MINRRP': 'DOUBLE',
-            'LOWERREGRRP': 'DOUBLE',
-        },
-        'primary_key': ['SETTLEMENTDATE', 'REGIONID', 'INTERVENTION'],
-    },
-    'DISPATCHLOAD': {
-        'partition_column': 'SETTLEMENTDATE',
+    # --- dispatch (5-min) ---
+    'dispatch_price': {
+        'file_mask': 'DISPATCHPRICE',
+        'primary_key': ['settlementdate', 'regionid', 'intervention'],
+        'partition_column': 'settlementdate',
         'partition_granularity': 'day',
     },
-    'DISPATCH_UNIT_SCADA': {
-        'partition_column': 'SETTLEMENTDATE',
-        'partition_granularity': 'day',
-        'schema': {
-            'SETTLEMENTDATE': 'TIMESTAMP',
-            'DUID': 'VARCHAR',
-            'SCADAVALUE': 'DOUBLE',
-        },
-        'primary_key': ['SETTLEMENTDATE', 'DUID'],
-    },
-    'DISPATCHREGIONSUM': {
-        'partition_column': 'SETTLEMENTDATE',
-        'partition_granularity': 'month',
-    },
-    'DISPATCHINTERCONNECTORRES': {
-        'partition_column': 'SETTLEMENTDATE',
+    'dispatch_load': {
+        'file_mask': 'DISPATCHLOAD',
+        'partition_column': 'settlementdate',
         'partition_granularity': 'day',
     },
-    'DISPATCHCONSTRAINT': {
-        'partition_column': 'SETTLEMENTDATE',
+    'dispatch_unit_scada': {
+        'file_mask': 'public_archive#dispatch_unit_scada#file01#*.zip',
+        'primary_key': ['settlementdate', 'duid'],
+        'partition_column': 'settlementdate',
         'partition_granularity': 'day',
     },
-    'DISPATCHCASESOLUTION': {
-        'partition_column': 'SETTLEMENTDATE',
+    'dispatch_regionsum': {
+        'file_mask': 'public_archive#dispatchregionsum#file01#*.zip',
+        'partition_column': 'settlementdate',
         'partition_granularity': 'month',
     },
-    'DISPATCH_MNSPBIDTRK': {
-        'partition_column': 'SETTLEMENTDATE',
-        'partition_granularity': 'month',
-    },
-    'DISPATCH_FCAS_REQ': {
-        'partition_column': 'SETTLEMENTDATE',
+    'dispatch_interconnection': {
+        'file_mask': 'public_archive#dispatchinterconnectorres#file01#*.zip',
+        'partition_column': 'settlementdate',
         'partition_granularity': 'day',
     },
-    # --- Trading (30-min settlement) ---
-    'TRADINGPRICE': {
-        'partition_column': 'SETTLEMENTDATE',
-        'partition_granularity': 'month',
-    },
-    'TRADINGLOAD': {
-        'partition_column': 'SETTLEMENTDATE',
-        'partition_granularity': 'month',
-    },
-    'TRADINGREGIONSUM': {
-        'partition_column': 'SETTLEMENTDATE',
-        'partition_granularity': 'month',
-    },
-    'TRADINGINTERCONNECT': {
-        'partition_column': 'SETTLEMENTDATE',
-        'partition_granularity': 'month',
-    },
-    # --- P5MIN (5-min forecast) ---
-    'P5MIN_REGIONSOLUTION': {
-        'partition_column': 'RUN_DATETIME',
+    'dispatch_interconnectorres': {
+        'file_mask': 'public_archive#dispatchinterconnectorres#file01#*.zip',
+        'partition_column': 'settlementdate',
         'partition_granularity': 'day',
     },
-    'P5MIN_UNITSOLUTION': {
-        'partition_column': 'RUN_DATETIME',
+    'dispatch_constraint': {
+        'file_mask': 'public_archive#dispatchconstraint#file01#*.zip',
+        'partition_column': 'settlementdate',
         'partition_granularity': 'day',
     },
-    'P5MIN_INTERCONNECTORSOLN': {
-        'partition_column': 'RUN_DATETIME',
+    'dispatch_local_price': {
+        'file_mask': 'public_archive#dispatch_local_price#file01#*.zip',
+        'partition_column': 'settlementdate',
         'partition_granularity': 'day',
     },
-    'P5MIN_CONSTRAINTSOLUTION': {
-        'partition_column': 'RUN_DATETIME',
+    'dispatch_casesolution': {
+        'file_mask': 'public_archive#dispatchcasesolution#file01#*.zip',
+        'partition_column': 'settlementdate',
+        'partition_granularity': 'month',
+    },
+    'dispatch_mnspbidtrk': {
+        'file_mask': 'public_archive#dispatch_mnspbidtrk#file01#*.zip',
+        'partition_column': 'settlementdate',
+        'partition_granularity': 'month',
+    },
+    'dispatch_fcas_req': {
+        'file_mask': 'public_archive#dispatch_fcas_req#file01#*.zip',
+        'partition_column': 'settlementdate',
         'partition_granularity': 'day',
     },
-    'P5MIN_CASESOLUTION': {
-        'partition_column': 'RUN_DATETIME',
+    # --- trading (30-min settlement) ---
+    'tradingprice': {
+        'file_mask': 'public_archive#tradingprice#file01#*.zip',
+        'partition_column': 'settlementdate',
         'partition_granularity': 'month',
     },
-    # --- PREDISPATCH (30-min forecast, ~1-2 days ahead) ---
-    'PREDISPATCHPRICE': {
-        'partition_column': 'PREDISPATCH_RUN_DATETIME',
+    'tradingload': {
+        'file_mask': 'public_archive#tradingload#file01#*.zip',
+        'partition_column': 'settlementdate',
         'partition_granularity': 'month',
     },
-    'PREDISPATCHLOAD': {
-        'partition_column': 'PREDISPATCH_RUN_DATETIME',
+    'tradingregionsum': {
+        'file_mask': 'public_archive#tradingregionsum#file01#*.zip',
+        'partition_column': 'settlementdate',
         'partition_granularity': 'month',
     },
-    'PREDISPATCHREGIONSUM': {
-        'partition_column': 'PREDISPATCH_RUN_DATETIME',
+    'tradinginterconnect': {
+        'file_mask': 'public_archive#tradinginterconnect#file01#*.zip',
+        'partition_column': 'settlementdate',
         'partition_granularity': 'month',
     },
-    'PREDISPATCHINTERCONNECTORRES': {
-        'partition_column': 'PREDISPATCH_RUN_DATETIME',
-        'partition_granularity': 'month',
-    },
-    'PREDISPATCHCASESOLUTION': {
-        'partition_column': 'PREDISPATCH_RUN_DATETIME',
-        'partition_granularity': 'month',
-    },
-    # --- PASA (ST PASA / MT PASA) ---
-    'STPASA_REGIONSOLUTION': {
-        'partition_column': 'RUN_DATETIME',
-        'partition_granularity': 'month',
-    },
-    'STPASA_INTERCONNECTORSOLN': {
-        'partition_column': 'RUN_DATETIME',
-        'partition_granularity': 'month',
-    },
-    'MTPASA_REGIONSOLUTION': {
-        'partition_column': 'RUN_DATETIME',
-        'partition_granularity': 'month',
-    },
-    'MTPASA_DUIDAVAILABILITY': {
-        'partition_column': 'RUN_DATETIME',
-        'partition_granularity': 'month',
-    },
-    # --- Bidding ---
-    'BIDPEROFFER': {
-        'partition_column': 'SETTLEMENTDATE',
+    # --- p5min (5-min forecast) ---
+    'p5min_regionsolution': {
+        'file_mask': 'public_archive#p5min_regionsolution#file01#*.zip',
+        'partition_column': 'run_datetime',
         'partition_granularity': 'day',
     },
-    'BIDDAYOFFER': {
-        'partition_column': 'SETTLEMENTDATE',
-        'partition_granularity': 'month',
-    },
-    'BIDPEROFFER_D': {
-        'partition_column': 'SETTLEMENTDATE',
+    'p5min_unitsolution': {
+        'file_mask': 'public_archive#p5min_unitsolution#file01#*.zip',
+        'partition_column': 'run_datetime',
         'partition_granularity': 'day',
     },
-    'BIDDAYOFFER_D': {
-        'partition_column': 'SETTLEMENTDATE',
-        'partition_granularity': 'month',
-    },
-    # --- FCAS / Ancillary Services ---
-    'DISPATCH_LOCAL_PRICE': {
-        'partition_column': 'SETTLEMENTDATE',
+    'p5min_interconnectorsoln': {
+        'file_mask': 'public_archive#p5min_interconnectorsoln#file01#*.zip',
+        'partition_column': 'run_datetime',
         'partition_granularity': 'day',
     },
-    'FCAS_4S': {
-        'partition_column': 'SETTLEMENTDATE',
+    'p5min_constraintsolution': {
+        'file_mask': 'public_archive#p5min_constraintsolution#file01#*.zip',
+        'partition_column': 'run_datetime',
         'partition_granularity': 'day',
     },
-    # --- Settlements ---
-    'DAILY_REGION_SUMMARY': {
-        'partition_column': 'SETTLEMENTDATE',
+    'p5min_casesolution': {
+        'file_mask': 'public_archive#p5min_casesolution#file01#*.zip',
+        'partition_column': 'run_datetime',
         'partition_granularity': 'month',
     },
-    'BILLING_NMAS_TML_RECOVERY': {
-        'partition_column': 'SETTLEMENTDATE',
+    # --- predispatch (30-min forecast, ~1-2 days ahead) ---
+    'predispatchprice': {
+        'file_mask': 'public_archive#predispatchprice#file01#*.zip',
+        'partition_column': 'predispatch_run_datetime',
         'partition_granularity': 'month',
     },
-    # --- Reference / registration data (near-static, no time partition) ---
-    'DUDETAIL': {
+    'predispatchload': {
+        'file_mask': 'public_archive#predispatchload#file01#*.zip',
+        'partition_column': 'predispatch_run_datetime',
+        'partition_granularity': 'month',
+    },
+    'predispatchregionsum': {
+        'file_mask': 'public_archive#predispatchregionsum#file01#*.zip',
+        'partition_column': 'predispatch_run_datetime',
+        'partition_granularity': 'month',
+    },
+    'predispatchinterconnectorres': {
+        'file_mask': 'public_archive#predispatchinterconnectorres#file01#*.zip',
+        'partition_column': 'predispatch_run_datetime',
+        'partition_granularity': 'month',
+    },
+    'predispatchcasesolution': {
+        'file_mask': 'public_archive#predispatchcasesolution#file01#*.zip',
+        'partition_column': 'predispatch_run_datetime',
+        'partition_granularity': 'month',
+    },
+    # --- pasa (st pasa / mt pasa) ---
+    'stpasa_regionsolution': {
+        'file_mask': 'public_archive#stpasa_regionsolution#file01#*.zip',
+        'partition_column': 'run_datetime',
+        'partition_granularity': 'month',
+    },
+    'stpasa_interconnectorsoln': {
+        'file_mask': 'public_archive#stpasa_interconnectorsoln#file01#*.zip',
+        'partition_column': 'run_datetime',
+        'partition_granularity': 'month',
+    },
+    'mtpasa_regionsolution': {
+        'file_mask': 'public_archive#mtpasa_regionsolution#file01#*.zip',
+        'partition_column': 'run_datetime',
+        'partition_granularity': 'month',
+    },
+    'mtpasa_duidavailability': {
+        'file_mask': 'public_archive#mtpasa_duidavailability#file01#*.zip',
+        'partition_column': 'run_datetime',
+        'partition_granularity': 'month',
+    },
+    # --- bidding ---
+    'bidperoffer': {
+        'file_mask': 'public_archive#bidperoffer#file01#*.zip',
+        'partition_column': 'settlementdate',
+        'partition_granularity': 'day',
+    },
+    'biddayoffer': {
+        'file_mask': 'public_archive#biddayoffer#file01#*.zip',
+        'partition_column': 'settlementdate',
+        'partition_granularity': 'month',
+    },
+    'bidperoffer_d': {
+        'file_mask': 'public_archive#bidperoffer_d#file01#*.zip',
+        'partition_column': 'settlementdate',
+        'partition_granularity': 'day',
+    },
+    'biddayoffer_d': {
+        'file_mask': 'public_archive#biddayoffer_d#file01#*.zip',
+        'partition_column': 'settlementdate',
+        'partition_granularity': 'month',
+    },
+    # --- fcas / ancillary services ---
+    'fcas_4s': {
+        'file_mask': 'public_archive#fcas_4s#file01#*.zip',
+        'partition_column': 'settlementdate',
+        'partition_granularity': 'day',
+    },
+    # --- settlements ---
+    'daily_region_summary': {
+        'file_mask': 'public_archive#daily_region_summary#file01#*.zip',
+        'partition_column': 'settlementdate',
+        'partition_granularity': 'month',
+    },
+    'billing_nmas_tml_recovery': {
+        'file_mask': 'public_archive#billing_nmas_tml_recovery#file01#*.zip',
+        'partition_column': 'settlementdate',
+        'partition_granularity': 'month',
+    },
+    # --- reference / registration data (near-static, no time partition) ---
+    'dudetail': {
+        'file_mask': 'public_archive#dudetail#file01#*.zip',
         'partition_column': None,
         'partition_granularity': None,
     },
-    'DUDETAILSUMMARY': {
+    'dudetailsummary': {
+        'file_mask': 'public_archive#dudetailsummary#file01#*.zip',
         'partition_column': None,
         'partition_granularity': None,
     },
-    'STATIONS': {
+    'stations': {
+        'file_mask': 'public_archive#stations#file01#*.zip',
         'partition_column': None,
         'partition_granularity': None,
     },
-    'GENUNITS': {
+    'genunits': {
+        'file_mask': 'public_archive#genunits#file01#*.zip',
         'partition_column': None,
         'partition_granularity': None,
     },
-    'PARTICIPANT': {
+    'participant': {
+        'file_mask': 'public_archive#participant#file01#*.zip',
         'partition_column': None,
         'partition_granularity': None,
     },
-    'PARTICIPANTCLASSIFICATION': {
+    'participantclassification': {
+        'file_mask': 'public_archive#participantclassification#file01#*.zip',
         'partition_column': None,
         'partition_granularity': None,
     },
-    'MARKETFEE': {
+    'marketfee': {
+        'file_mask': 'public_archive#marketfee#file01#*.zip',
         'partition_column': None,
         'partition_granularity': None,
     },
-    'INTERCONNECTOR': {
+    'interconnector': {
+        'file_mask': 'public_archive#interconnector#file01#*.zip',
         'partition_column': None,
         'partition_granularity': None,
     },
-    'INTERCONNECTORCONSTRAINT': {
+    'interconnectorconstraint': {
+        'file_mask': 'public_archive#interconnectorconstraint#file01#*.zip',
         'partition_column': None,
         'partition_granularity': None,
     },
-    'LOSSFACTORMODEL': {
+    'lossfactormodel': {
+        'file_mask': 'public_archive#lossfactormodel#file01#*.zip',
         'partition_column': None,
         'partition_granularity': None,
     },
-    'LOSSMODEL': {
+    'lossmodel': {
+        'file_mask': 'public_archive#lossmodel#file01#*.zip',
         'partition_column': None,
         'partition_granularity': None,
     },
@@ -245,9 +278,18 @@ _DUCKDB_TYPE_MAP = {
 }
 
 
-def get_tables() -> list[str]:
-    """Return the list of table names in TABLE_CONFIG."""
-    return list(TABLE_CONFIG.keys())
+def get_tables() -> set[str]:
+    """
+    Return the set of table names in TABLE_CONFIG.
+    """
+    return set(TABLE_CONFIG.keys())
+
+
+def get_table_config(table_name: str) -> dict | None:
+    """
+    Return the config dict for a given table name.
+    """
+    return TABLE_CONFIG.get(table_name)
 
 
 def to_duckdb_schema(schema: dict) -> dict:

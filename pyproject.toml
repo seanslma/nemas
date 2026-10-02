@@ -43,4 +43,9 @@ preview = false
 quote-style = "single"
 
 [tool.ruff.lint]
-ignore = ["I001", "DTZ011", "RUF013"]
+ignore = [
+    "I001",     # xx
+    "DTZ007",   # xx
+    "DTZ011",
+    "RUF013",
+]

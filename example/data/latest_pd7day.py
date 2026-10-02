@@ -1,14 +1,15 @@
 import polars as pl
 from datetime import date
-from nemas.data import get_url, read_zip
+from nemas.data import get_url, parse_zip
 
 
 def get_latest_pd7day_rrp():
     url = 'https://nemweb.com.au/Reports/CURRENT/PD7Day'
     latest = get_url(url, latest_n=1, url_only=True)
-    print(latest.item(0, 'url'))
-    data = read_zip(
-        latest.item(0, 'url'),
+    zip_file_url = latest.item(0, 'url')
+    print(zip_file_url)
+    data = parse_zip(
+        zip_file_url,
         tables=['pricesolution'],
         columns=['interval_datetime', 'regionid', 'RRP'],
         schemas={

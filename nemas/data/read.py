@@ -4,7 +4,7 @@ from datetime import datetime
 from ..config.config import TABLE_CONFIG
 
 
-def get_data(
+def read_data(
     tables: str | list[str],
     start_date: datetime,
     end_date: datetime = None,

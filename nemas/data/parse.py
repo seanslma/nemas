@@ -7,6 +7,11 @@ from pathlib import Path
 from zipfile import ZipFile
 from typing import IO
 
+import io
+import requests
+from contextlib import contextmanager
+from tempfile import SpooledTemporaryFile
+
 from nemas.utils import (
     merge_df_dicts,
     to_lowercase,
@@ -17,7 +22,7 @@ from nemas.data.filter import apply_filters
 
 
 __all__ = [
-    'read_zip',
+    'parse_zip',
 ]
 
 logger = logging.getLogger(__name__)
@@ -131,35 +136,78 @@ def standardize_params(
 def get_source_bytes(
     source: str | Path | IO[str] | IO[bytes] | bytes,
     *,
-    requests_session=None,
-) -> bytes:
+    session=None,
+) -> tuple[bytes, str | None]:
+    """
+    Normalize a local path, URL, file-like object, or raw bytes into raw bytes.
+
+    Returns a tuple of (raw_bytes, filename),
+    where filename is None if it is not from website.
+    """
+    filename = None
     # Normalize source into raw bytes
     if isinstance(source, bytes):
         raw_bytes = source
-        default_name = 'downloaded.zip'
     elif isinstance(source, (str, Path)):
         source_str = str(source)
         if source_str.startswith(('http://', 'https://')):
-            raw_bytes = get_html(
-                source_str, session=requests_session, ret_type='content'
-            )
-            default_name = Path(source_str).name or 'downloaded.zip'
+            raw_bytes = get_html(source_str, session=session, ret_type='content')
+            filename = Path(source_str).name.replace('%23', '#')
         else:
             path = Path(source_str)
             if not path.exists():
                 raise FileNotFoundError(f'File not exist: {path}')
             raw_bytes = path.read_bytes()
-            default_name = path.name
     elif hasattr(source, 'read'):
         # File-like object (IO[str] or IO[bytes])
         content = source.read()
         raw_bytes = content.encode() if isinstance(content, str) else content
-        default_name = getattr(source, 'name', 'downloaded.zip')
-        default_name = Path(default_name).name if default_name else 'downloaded.zip'
     else:
         raise TypeError(f'Unsupported source type: {type(source)!r}')
 
-    return raw_bytes, default_name
+    return raw_bytes, filename
+
+
+MAX_MEM_MiB = 32 * 1024 * 1024  # 32 MB threshold
+
+
+@contextmanager
+def zip_source(
+    source: str | Path | bytes,
+    *,
+    session=None,
+):
+    """
+    Normalize a local path, URL, or raw bytes into a seekable file handle or path.
+    """
+    # Local file path (str or Path)
+    if isinstance(source, Path) or (
+        isinstance(source, str) and not source.startswith(('http://', 'https://'))
+    ):
+        path = Path(source)
+        if not path.exists():
+            raise FileNotFoundError(f'Local file not found: {path}')
+        yield str(path)
+        return
+
+    # URL — Stream into binary spooled buffer
+    if isinstance(source, str):
+        requester = session if session is not None else requests
+        with SpooledTemporaryFile(max_size=MAX_MEM_MiB, mode='w+b') as f:
+            with requester.get(source, stream=True) as resp:
+                resp.raise_for_status()
+                for chunk in resp.iter_content(chunk_size=1024 * 1024):
+                    f.write(chunk)
+            f.seek(0)
+            yield f
+        return
+
+    # Raw bytes
+    if isinstance(source, (bytes, bytearray)):
+        yield io.BytesIO(source)
+        return
+
+    raise TypeError(f'Unsupported source type: {type(source)}')
 
 
 def read_zip_csv(
@@ -169,6 +217,7 @@ def read_zip_csv(
     columns: list[str] | dict[str, list[str]] = None,
     schemas: dict[str, list[str] | dict[str, pl.DataType]] = None,
     conditions: dict[str, pl.Expr | list[tuple]] = None,
+    drop_metadata_columns: bool = True,
     header_to_lowercase: bool = True,
     lazy: bool = False,
 ) -> dict:
@@ -243,7 +292,7 @@ def read_zip_csv(
                 truncate_ragged_lines=True,
                 # low_memory=True,
             )
-            if cols is None:
+            if cols is None and drop_metadata_columns:
                 df = df.select(~cs.by_index(range(4)))  # drop metadata columns
             else:
                 df = df.select(cols)
@@ -267,7 +316,7 @@ def read_zip_csv(
                 batch_size=8192 // 4,
                 # low_memory=True,
             )
-            if cols is None:
+            if cols is None and drop_metadata_columns:
                 df = df.select(~cs.by_index(range(4)))  # drop metadata columns
             if header_to_lowercase:
                 df = df.rename(str.lower)
@@ -279,15 +328,14 @@ def read_zip_csv(
     return dfs
 
 
-def read_zip(
+def parse_zip(
     source: str | Path | IO[str] | IO[bytes] | bytes,
     *,
-    requests_session=None,
+    requests_session: requests.Session = None,
     tables: list = None,
     columns: list[str] | dict[str, list[str]] = None,
     schemas: dict[str, dict] = None,
     conditions: dict[str, pl.Expr | list[tuple]] = None,
-    save_zip: bool = False,
     zip_path: str | Path | None = None,
     validate_params: bool = True,
     header_to_lowercase: bool = True,
@@ -313,11 +361,8 @@ def read_zip(
     conditions : dict[str, pl.Expr | list[tuple]], optional
         Dict of table_name -> filter conditions. Each condition can be a polars
         expression or a list of tuples (column, operator, value).
-    save_zip : bool
-        If True, save the raw zip bytes to `zip_path` (or a default name).
     zip_path : str | Path, optional
-        Where to save the zip if keep_zip=True. Defaults to the source filename
-        (or "downloaded.zip" if it can't be inferred, e.g. from a URL/buffer).
+        Where to save the zip file. If None, the zip file will not be saved.
     validate_params : bool
         If True, validate and standardize the `tables`, `columns`, `schemas`, and
         `conditions` parameters.
@@ -326,14 +371,12 @@ def read_zip(
     lazy : bool
         If True, use lazy mode.
     """
-    raw_bytes, default_name = get_source_bytes(
-        source, requests_session=requests_session
-    )
+    raw_bytes, filename = get_source_bytes(source, session=requests_session)
     buffer = BytesIO(raw_bytes)
 
     # Save to disk if requested
-    if save_zip:
-        save_path = Path(zip_path) if zip_path else Path(default_name)
+    if zip_path is not None and filename is not None:
+        save_path = Path(zip_path) / filename
         save_path.write_bytes(buffer.getvalue())
 
     # Standardize parameters
@@ -364,16 +407,116 @@ def read_zip(
                 )
                 data |= dfs
             elif re.search(r'.+(\.(zip|ZIP))$', file.filename):
-                dat = read_zip(
+                dat = parse_zip(
                     zf.read(file.filename),
                     tables=tables,
                     columns=columns,
                     schemas=schemas,
                     conditions=conditions,
-                    save_zip=False,
+                    zip_path=None,
                     validate_params=False,
                     header_to_lowercase=header_to_lowercase,
                     lazy=lazy,
                 )
                 data = merge_df_dicts(data, dat)
+    return data
+
+
+def read_zip(
+    source: str | Path | IO[str] | IO[bytes] | bytes,
+    *,
+    requests_session: requests.Session = None,
+    tables: list = None,
+    columns: list[str] | dict[str, list[str]] = None,
+    schemas: dict[str, dict] = None,
+    conditions: dict[str, pl.Expr | list[tuple]] = None,
+    zip_path: str | Path | None = None,
+    validate_params: bool = True,
+    drop_metadata_columns: bool = True,
+    header_to_lowercase: bool = True,
+    lazy: bool = False,
+) -> dict[str, pl.DataFrame]:
+    """
+    Read a NEM zip file from a URL, local filepath, file-like object, or raw bytes.
+
+    Parameters
+    ----------
+    source : str | Path | IO[str] | IO[bytes] | bytes
+        - str/Path that looks like a URL (http:// or https://)
+        - str/Path pointing to an existing file
+        - file-like object (has `.read()`)
+        - bytes
+    requests_session : requests.Session, optional
+        If provided, use this session for HTTP requests (e.g. for authentication).
+    tables : list[str], optional
+        List of table names to read. If None, read all tables.
+    schemas : dict[str, dict], optional
+        Dict of table_name -> schema dict (column_name -> polars dtype).
+        If None, infer schema from the CSV.
+    conditions : dict[str, pl.Expr | list[tuple]], optional
+        Dict of table_name -> filter conditions. Each condition can be a polars
+        expression or a list of tuples (column, operator, value).
+    zip_path : str | Path, optional
+        Where to save the zip. If None, the zip will not be saved.
+    validate_params : bool
+        If True, validate and standardize the `tables`, `columns`, `schemas`, and
+        `conditions` parameters.
+    drop_metadata_columns : bool
+        If True, drop the first 4 metadata columns from each table.
+    header_to_lowercase : bool
+        If True, convert all column names to lowercase.
+    lazy : bool
+        If True, use lazy mode.
+    """
+    with zip_source(source, session=requests_session) as src:
+        # Save to disk if requested, only for http files
+        if zip_path is not None and (
+            isinstance(source, str) and source.startswith(('http://', 'https://'))
+        ):
+            zip_path = Path(zip_path) / Path(source).name.replace('%23', '#')
+            zip_path.write_bytes(src.read())
+            src.seek(0)
+
+        # Standardize parameters
+        if validate_params:
+            tables, columns, schemas, conditions = standardize_params(
+                tables=tables,
+                columns=columns,
+                schemas=schemas,
+                conditions=conditions,
+                conditions_lowercase=header_to_lowercase,
+            )
+
+        # Process from the same buffer
+        data = {}
+        with ZipFile(src) as zf:
+            for file in zf.filelist:
+                filename = file.filename
+                if filename.lower().endswith('.csv'):
+                    dfs = read_zip_csv(
+                        zf,
+                        filename=filename,
+                        tables=tables,
+                        columns=columns,
+                        schemas=schemas,
+                        conditions=conditions,
+                        drop_metadata_columns=drop_metadata_columns,
+                        header_to_lowercase=header_to_lowercase,
+                        lazy=lazy,
+                    )
+                    data |= dfs
+                elif filename.lower().endswith('.zip'):
+                    dat = read_zip(
+                        zf.read(file.filename),
+                        tables=tables,
+                        columns=columns,
+                        schemas=schemas,
+                        conditions=conditions,
+                        zip_path=None,
+                        validate_params=False,
+                        drop_metadata_columns=drop_metadata_columns,
+                        header_to_lowercase=header_to_lowercase,
+                        lazy=lazy,
+                    )
+                    data = merge_df_dicts(data, dat)
     return data

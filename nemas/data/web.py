@@ -4,6 +4,13 @@ import polars as pl
 from urllib.parse import urlparse
 from typing import Literal
 
+from tenacity import (
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential_jitter,
+)
+
 from nemas.utils.cache import ttl_cached
 
 
@@ -23,33 +30,42 @@ def get_url_base(url: str) -> str:
     return base_url
 
 
+def _is_retryable(exc: BaseException) -> bool:
+    if isinstance(exc, (requests.ConnectionError, requests.Timeout)):
+        return True
+    if isinstance(exc, requests.HTTPError) and exc.response is not None:
+        return exc.response.status_code in {429, 500, 502, 503, 504}
+    return False
+
+
 @ttl_cached(namespace='html', exclude=['session', 'cache'])
+@retry(
+    retry=retry_if_exception(_is_retryable),
+    stop=stop_after_attempt(4),
+    wait=wait_exponential_jitter(initial=2, max=16),
+    reraise=True,
+)
 def get_html(
     url,
     *,
-    session=None,
+    session: requests.Session = None,
     ret_type: Literal['text', 'content'] = 'text',
     cache: bool = False,
 ) -> str | bytes:
-    if session:
-        resp = session.get(url)
-    else:
-        resp = requests.get(url)
+    resp = (session or requests).get(url, timeout=16)
     resp.raise_for_status()
-    if ret_type == 'text':
-        return resp.text
-    else:
-        return resp.content
+    return resp.text if ret_type == 'text' else resp.content
 
 
 def get_url(
     url: str,
     *,
-    session=None,
+    session: requests.Session = None,
     latest_n: int = None,
     last_file: str = None,
     url_only: bool = True,
     full_url: bool = True,
+    cache: bool = False,
 ) -> pl.DataFrame:
     """
     Return a DataFrame of NEM files from a given URL.
@@ -74,7 +90,7 @@ def get_url(
             r'<A HREF="([^"]+)">([^<]+)</A>'
         )
 
-    html = get_html(url, session=session, ret_type='text')
+    html = get_html(url, session=session, ret_type='text', cache=cache)
     if last_file:
         idx = html.rfind(last_file)
         if idx != -1:
